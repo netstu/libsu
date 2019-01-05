@@ -1,7 +1,12 @@
 package com.topjohnwu.libsuexample;
 
 import android.app.Activity;
+import android.content.ComponentName;
+import android.content.ServiceConnection;
 import android.os.Bundle;
+import android.os.IBinder;
+import android.os.Process;
+import android.os.RemoteException;
 import android.text.TextUtils;
 import android.util.Log;
 import android.widget.Button;
@@ -11,6 +16,7 @@ import android.widget.TextView;
 
 import com.topjohnwu.superuser.CallbackList;
 import com.topjohnwu.superuser.Shell;
+import com.topjohnwu.superuser.java.RootIPC;
 
 import java.io.IOException;
 import java.util.List;
@@ -21,6 +27,18 @@ public class MainActivity extends Activity {
     private EditText input;
     private ScrollView sv;
     private List<String> consoleList;
+    private ITest IPCTest;
+    private ServiceConnection connection = new ServiceConnection() {
+        @Override
+        public void onServiceConnected(ComponentName name, IBinder service) {
+            IPCTest = ITest.Stub.asInterface(service);
+        }
+
+        @Override
+        public void onServiceDisconnected(ComponentName name) {
+
+        }
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -36,6 +54,9 @@ public class MainActivity extends Activity {
         Button sync_script = findViewById(R.id.sync_script);
         Button async_script = findViewById(R.id.async_script);
         Button clear = findViewById(R.id.clear);
+        Button bind = findViewById(R.id.bind);
+        Button unbind = findViewById(R.id.unbind);
+        Button ipc = findViewById(R.id.ipc);
 
         // Run the shell command in the input box synchronously
         sync_cmd.setOnClickListener(v -> {
@@ -72,6 +93,18 @@ public class MainActivity extends Activity {
                 Shell.sh(getResources().openRawResource(R.raw.count)).to(consoleList).submit());
 
         clear.setOnClickListener(v -> consoleList.clear());
+
+        bind.setOnClickListener(v -> RootIPC.bindService(this, TestService.class, connection));
+
+        unbind.setOnClickListener(v -> RootIPC.unbindService(connection));
+
+        ipc.setOnClickListener(v -> {
+            if (IPCTest != null) {
+                try {
+                    consoleList.add("Non-root: " + Process.myPid() + " Root: " + IPCTest.myPid());
+                } catch (RemoteException ignored) { /* Will not happen */ }
+            }
+        });
 
         /* Create a CallbackList to update the UI with Shell output
          * Here I demonstrate 2 ways to implement a CallbackList

@@ -105,5 +105,38 @@
 
     </LinearLayout>
 
+    <LinearLayout
+        style="?android:buttonStyle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@android:color/darker_gray"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/bind"
+            style="?android:borderlessButtonStyle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Bind Serv." />
+
+        <Button
+            android:id="@+id/unbind"
+            style="?android:borderlessButtonStyle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Unbind Serv." />
+
+        <Button
+            android:id="@+id/ipc"
+            style="?android:borderlessButtonStyle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="IPC" />
+
+    </LinearLayout>
+
 </LinearLayout>
 
