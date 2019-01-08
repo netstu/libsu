@@ -1,14 +1,9 @@
 package com.topjohnwu.superuser.java;
 
-import android.net.LocalSocket;
 import android.os.Binder;
 import android.os.IInterface;
 import android.os.Parcel;
 
-import java.io.BufferedInputStream;
-import java.io.BufferedOutputStream;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.IOException;
 
 import androidx.annotation.NonNull;
@@ -17,40 +12,44 @@ import androidx.annotation.Nullable;
 /**
  * Client side Binder (non-root)
  */
-class RootBinder extends Binder {
+class RootClientBinder extends Binder {
 
     private Class<? extends RootService> cls;
 
-    private static DataOutputStream socketOut;
-    private static DataInputStream socketIn;
-
     private byte[] rawReply;
+    private boolean unBound = false;
 
-    RootBinder(Class<? extends RootService> cls) throws IOException {
-        LocalSocket socket = RootIPC.serverSocket.accept();
-        socketOut = new DataOutputStream(new BufferedOutputStream(socket.getOutputStream()));
-        socketIn = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
+    RootClientBinder(Class<? extends RootService> cls) {
         rawReply = new byte[4096];
         this.cls = cls;
     }
 
     @Override
     protected boolean onTransact(int code, @NonNull Parcel data, @Nullable Parcel reply, int flags) {
-        try {
+        if (unBound)
+            return false;
+
+        try (Sockets.Handle handle = Sockets.clientGetSocket()) {
+            if (handle == null)
+                return false;
+
+            // Notify server we are going to start a new IPC session
+            RootIPC.startIPC(handle.hashCode(), cls);
+
             // Write code
-            socketOut.writeInt(code);
+            handle.socketOut.writeInt(code);
 
             // Write data
             byte[] rawData = data.marshall();
-            socketOut.writeInt(rawData.length);
-            socketOut.write(rawData);
-            socketOut.flush();
+            handle.socketOut.writeInt(rawData.length);
+            handle.socketOut.write(rawData);
+            handle.socketOut.flush();
 
             // Read reply
-            int replySz = socketIn.readInt();
+            int replySz = handle.socketIn.readInt();
             if (rawReply.length < replySz)
                 rawReply = new byte[(replySz / 4096 + 1) * 4096];
-            socketIn.readFully(rawReply, 0, replySz);
+            handle.socketIn.readFully(rawReply, 0, replySz);
             if (reply != null)
                 reply.unmarshall(rawReply, 0, replySz);
         } catch (IOException e) {
@@ -66,9 +65,7 @@ class RootBinder extends Binder {
     }
 
     void unBind() {
-        try {
-            socketOut.close();
-        } catch (IOException ignored) {}
+        unBound = true;
     }
 
     Class<? extends RootService> getBoundService() {
