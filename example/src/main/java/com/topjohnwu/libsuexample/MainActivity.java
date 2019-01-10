@@ -2,6 +2,7 @@ package com.topjohnwu.libsuexample;
 
 import android.app.Activity;
 import android.content.ComponentName;
+import android.content.Intent;
 import android.content.ServiceConnection;
 import android.os.Bundle;
 import android.os.IBinder;
@@ -96,7 +97,7 @@ public class MainActivity extends Activity {
 
         clear.setOnClickListener(v -> consoleList.clear());
 
-        bind.setOnClickListener(v -> RootIPC.bindService(TestService.class, connection));
+        bind.setOnClickListener(v -> RootIPC.bindService(new Intent(this, TestService.class), connection));
 
         unbind.setOnClickListener(v -> RootIPC.unbindService(connection));
 

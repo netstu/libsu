@@ -76,8 +76,8 @@ public class Sockets {
     private static SparseArray<Handle> socketMap;
     private static LocalSocketAddress masterAddress;
 
-    static Handle serverGetSocket(int client) {
-        return socketMap.get(client);
+    static Handle serverGetSocket(int hash) {
+        return socketMap.get(hash);
     }
 
     static LocalSocket connectMasterSocket(String name) throws IOException {
@@ -87,7 +87,7 @@ public class Sockets {
         return master;
     }
 
-    static void newServer(int hash) {
+    static void newSocket(int hash) {
         if (socketMap == null)
             socketMap = new SparseArray<>();
         try {

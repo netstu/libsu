@@ -1,6 +1,8 @@
 package com.topjohnwu.superuser.java;
 
+import android.content.Intent;
 import android.net.LocalSocket;
+import android.os.Parcel;
 
 import com.topjohnwu.superuser.Shell;
 import com.topjohnwu.superuser.internal.InternalUtils;
@@ -51,19 +53,12 @@ public class EntryPoint {
                         case RootIPC.NEWSOCK:
                             // <socket hash>
                             sockHash = Integer.parseInt(tok[1]);
-                            Sockets.newServer(sockHash);
+                            Sockets.newSocket(sockHash);
                             break;
                         case RootIPC.BIND:
-                            // <service class>
-                            cls = Class.forName(tok[1]);
-                            service = serviceMap.get(cls);
-                            if (service == null) {
-                                if (!RootService.class.isAssignableFrom(cls))
-                                    continue;
-                                service = (RootService) cls.newInstance();
-                                serviceMap.put(cls, service);
-                            }
-                            service.addBind();
+                            // <socket hash>
+                            sockHash = Integer.parseInt(tok[1]);
+                            Shell.EXECUTOR.execute(() -> handleBind(sockHash));
                             break;
                         case RootIPC.UNBIND:
                             // <service class>
@@ -95,5 +90,53 @@ public class EntryPoint {
         }
         // The other end of the socket is closed, terminate
         System.exit(0);
+    }
+
+    private byte[] rawIntent = new byte[4096];
+
+    private Intent readIntent(Sockets.Handle handle) throws IOException {
+        Parcel parcel = Parcel.obtain();
+        Intent intent;
+        try {
+            int intentSz = handle.socketIn.readInt();
+            if (rawIntent.length < intentSz)
+                rawIntent = new byte[(intentSz / 4096 + 1) * 4096];
+            handle.socketIn.readFully(rawIntent, 0, intentSz);
+            parcel.unmarshall(rawIntent, 0, intentSz);
+            parcel.setDataPosition(0);
+            intent = new Intent();
+            intent.readFromParcel(parcel);
+        } finally {
+            parcel.recycle();
+        }
+        return intent;
+    }
+
+    private void handleBind(int hash) {
+        Sockets.Handle handle = Sockets.serverGetSocket(hash);
+        if (handle == null)
+            return;
+        try {
+            Intent intent = readIntent(handle);
+            Class<?> cls = Class.forName(intent.getComponent().getClassName());
+            RootService service = serviceMap.get(cls);
+
+            if (service == null) {
+                service = (RootService) cls.newInstance();
+                serviceMap.put(cls, service);
+            }
+            service.addBind(intent);
+
+            // ack
+            handle.socketOut.writeBoolean(true);
+            handle.socketOut.flush();
+        } catch (Exception e) {
+            InternalUtils.stackTrace(e);
+            try {
+                // ack
+                handle.socketOut.writeBoolean(false);
+                handle.socketOut.flush();
+            } catch (IOException ignored) {}
+        }
     }
 }

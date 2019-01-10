@@ -1,5 +1,6 @@
 package com.topjohnwu.superuser.java;
 
+import android.content.Intent;
 import android.os.IBinder;
 import android.os.Process;
 
@@ -18,7 +19,7 @@ public abstract class RootService {
 
     public void onCreate() {}
 
-    public abstract IBinder onBind();
+    public abstract IBinder onBind(Intent intent);
 
     public boolean onUnbind() {
         return false;
@@ -26,9 +27,9 @@ public abstract class RootService {
 
     public void onDestroy () {}
 
-    void addBind() {
+    void addBind(Intent intent) {
         if (bindCount == 0)
-            serverBinder = new RootServerBinder(onBind());
+            serverBinder = new RootServerBinder(onBind(intent));
         bindCount++;
     }
 

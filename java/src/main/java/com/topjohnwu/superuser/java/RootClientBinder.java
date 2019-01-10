@@ -1,5 +1,6 @@
 package com.topjohnwu.superuser.java;
 
+import android.content.Intent;
 import android.os.Binder;
 import android.os.DeadObjectException;
 import android.os.IInterface;
@@ -7,6 +8,7 @@ import android.os.Parcel;
 import android.os.RemoteException;
 
 import com.topjohnwu.superuser.Shell;
+import com.topjohnwu.superuser.ShellUtils;
 
 import java.io.IOException;
 
@@ -18,14 +20,13 @@ import androidx.annotation.Nullable;
  */
 class RootClientBinder extends Binder {
 
-    private Class<? extends RootService> cls;
-
     private byte[] rawReply;
     private boolean unBound = false;
+    private Intent intent;
 
-    RootClientBinder(Class<? extends RootService> cls) {
+    RootClientBinder(Intent i) {
         rawReply = new byte[4096];
-        this.cls = cls;
+        intent = i;
     }
 
     @Override
@@ -35,8 +36,11 @@ class RootClientBinder extends Binder {
             throw new DeadObjectException();
 
         try (Sockets.Handle handle = Sockets.clientGetSocket()) {
-            // Notify server we are going to start a new IPC session
-            RootIPC.startIPC(handle.hashCode(), cls);
+            // Clear up potential garbage inputs
+            ShellUtils.cleanInputStream(handle.socketIn);
+
+            // Notify server we are going to start an IPC session
+            RootIPC.startIPC(handle.hashCode(), intent.getComponent().getClassName());
 
             // Write code
             handle.socketOut.writeInt(code);
@@ -50,7 +54,7 @@ class RootClientBinder extends Binder {
             // Read reply
             int replySz = handle.socketIn.readInt();
             if (replySz < 0)
-                return false;
+                return false;  /* Unknown code */
             if (rawReply.length < replySz)
                 rawReply = new byte[(replySz / 4096 + 1) * 4096];
             handle.socketIn.readFully(rawReply, 0, replySz);
@@ -73,7 +77,7 @@ class RootClientBinder extends Binder {
         unBound = true;
     }
 
-    Class<? extends RootService> getBoundService() {
-        return cls;
+    Intent getIntent() {
+        return intent;
     }
 }
