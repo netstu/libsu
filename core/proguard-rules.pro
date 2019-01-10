@@ -23,4 +23,5 @@
 # Strip out verbose logging
 -assumenosideeffects class com.topjohnwu.superuser.internal.InternalUtils {
   public static *** log(...);
+  public static *** stackTrace(...);
 }
