@@ -34,7 +34,10 @@ class RootServerBinder {
                 data.unmarshall(rawData, 0, dataSz);
 
                 // Actual invocation
-                binder.transact(code, data, reply, 0);
+                if (!binder.transact(code, data, reply, 0)) {
+                    handle.socketOut.writeInt(-1);
+                    return null;
+                }
 
                 // Write reply
                 byte[] rawReply = reply.marshall();

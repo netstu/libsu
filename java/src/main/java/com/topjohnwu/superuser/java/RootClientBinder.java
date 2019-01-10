@@ -1,8 +1,12 @@
 package com.topjohnwu.superuser.java;
 
 import android.os.Binder;
+import android.os.DeadObjectException;
 import android.os.IInterface;
 import android.os.Parcel;
+import android.os.RemoteException;
+
+import com.topjohnwu.superuser.Shell;
 
 import java.io.IOException;
 
@@ -25,14 +29,12 @@ class RootClientBinder extends Binder {
     }
 
     @Override
-    protected boolean onTransact(int code, @NonNull Parcel data, @Nullable Parcel reply, int flags) {
+    protected boolean onTransact(int code, @NonNull Parcel data, @Nullable Parcel reply,
+                                 int flags) throws RemoteException {
         if (unBound)
-            return false;
+            throw new DeadObjectException();
 
         try (Sockets.Handle handle = Sockets.clientGetSocket()) {
-            if (handle == null)
-                return false;
-
             // Notify server we are going to start a new IPC session
             RootIPC.startIPC(handle.hashCode(), cls);
 
@@ -47,13 +49,16 @@ class RootClientBinder extends Binder {
 
             // Read reply
             int replySz = handle.socketIn.readInt();
+            if (replySz < 0)
+                return false;
             if (rawReply.length < replySz)
                 rawReply = new byte[(replySz / 4096 + 1) * 4096];
             handle.socketIn.readFully(rawReply, 0, replySz);
             if (reply != null)
                 reply.unmarshall(rawReply, 0, replySz);
         } catch (IOException e) {
-            return false;
+            Shell.EXECUTOR.submit(RootIPC::serverError);
+            throw new DeadObjectException();
         }
         return true;
     }

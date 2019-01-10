@@ -46,7 +46,7 @@ public class Sockets {
         return serverSocket.accept();
     }
 
-    static Handle clientGetSocket() {
+    static Handle clientGetSocket() throws IOException {
         if (socketPool == null)
             socketPool = new ConcurrentLinkedQueue<>();
         Handle handle = socketPool.poll();
@@ -61,11 +61,15 @@ public class Sockets {
                 });
             } catch (ExecutionException e) {
                 InternalUtils.stackTrace(e);
-                return null;
+                throw (IOException) e.getCause();
             }
             handle = newHandle;
         }
         return handle;
+    }
+
+    static void clearPool() {
+        socketPool.clear();
     }
 
     // Server side

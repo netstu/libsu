@@ -32,11 +32,13 @@ public class MainActivity extends Activity {
         @Override
         public void onServiceConnected(ComponentName name, IBinder service) {
             IPCTest = ITest.Stub.asInterface(service);
+            Log.d(ExampleApp.TAG, name + " connected");
         }
 
         @Override
         public void onServiceDisconnected(ComponentName name) {
-
+            IPCTest = null;
+            Log.d(ExampleApp.TAG, name + " disconnected");
         }
     };
 
@@ -94,7 +96,7 @@ public class MainActivity extends Activity {
 
         clear.setOnClickListener(v -> consoleList.clear());
 
-        bind.setOnClickListener(v -> RootIPC.bindService(this, TestService.class, connection));
+        bind.setOnClickListener(v -> RootIPC.bindService(TestService.class, connection));
 
         unbind.setOnClickListener(v -> RootIPC.unbindService(connection));
 
@@ -102,7 +104,10 @@ public class MainActivity extends Activity {
             if (IPCTest != null) {
                 try {
                     consoleList.add("Non-root: " + Process.myPid() + " Root: " + IPCTest.myPid());
-                } catch (RemoteException ignored) { /* Will not happen */ }
+                } catch (RemoteException e) {
+                    Log.d(ExampleApp.TAG, "", e);
+                    IPCTest = null;
+                }
             }
         });
 

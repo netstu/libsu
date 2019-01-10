@@ -18,8 +18,6 @@ import java.io.Writer;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
 
 import androidx.annotation.WorkerThread;
 
@@ -34,80 +32,97 @@ public class RootIPC {
     private static Writer socketOut;
 
     public static synchronized void bindService(
-            Context context, Class<? extends RootService> cls, ServiceConnection conn) {
-        Shell.EXECUTOR.execute(() -> {
-            ComponentName name = new ComponentName(context, cls);
-            String msg = String.format("%s|%s\n", BIND, cls.getName());
-            if (socketOut == null)
-                startRootServer(context);
+            Class<? extends RootService> cls, ServiceConnection conn) {
+        RootClientBinder cachedBinder = connMap.get(conn);
+        if (cachedBinder != null)
+            return;
+        Shell.EXECUTOR.submit(() -> {
             try {
-                socketOut.write(msg);
-                socketOut.flush();
-                RootClientBinder binder = new RootClientBinder(cls);
-                connMap.put(conn, binder);
-                conn.onServiceConnected(name, binder);
+                bindService(InternalUtils.getContext(), cls, conn);
             } catch (IOException e) {
                 InternalUtils.stackTrace(e);
-                conn.onServiceDisconnected(name);
+                serverError();
             }
+            return null;
         });
     }
 
-    public static synchronized void unbindService (ServiceConnection conn) {
+    public static synchronized void unbindService(ServiceConnection conn) {
         RootClientBinder binder = connMap.get(conn);
         if (binder != null) {
             connMap.remove(conn);
+            binder.unBind();
             String msg = String.format("%s|%s\n", UNBIND, binder.getBoundService().getName());
             try {
                 socketOut.write(msg);
                 socketOut.flush();
             } catch (IOException e) {
                 InternalUtils.stackTrace(e);
+                Shell.EXECUTOR.submit(RootIPC::serverError);
             }
-            binder.unBind();
         }
     }
 
-    static synchronized void newSocketPair(int hash) {
+    static synchronized void newSocketPair(int hash) throws IOException {
         String msg = String.format(Locale.US, "%s|%d\n", NEWSOCK, hash);
-        try {
-            socketOut.write(msg);
-            socketOut.flush();
-        } catch (IOException e) {
-            InternalUtils.stackTrace(e);
-        }
+        socketOut.write(msg);
+        socketOut.flush();
     }
 
-    static synchronized void startIPC(int socketHash, Class<? extends RootService> cls) {
+    static synchronized void startIPC(int socketHash, Class<? extends RootService> cls) throws IOException {
         String msg = String.format(Locale.US, "%s|%d|%s\n", IPC, socketHash, cls.getName());
-        try {
-            socketOut.write(msg);
-            socketOut.flush();
-        } catch (IOException e) {
-            InternalUtils.stackTrace(e);
-        }
+        socketOut.write(msg);
+        socketOut.flush();
     }
 
     @WorkerThread
-    private static synchronized void startRootServer(Context context) {
-        try {
-            String app_process = new File("/proc/self/exe").getCanonicalPath();
-            String LD_LIBRARY_PATH = app_process.contains("64") ?
-                    "/system/lib64:/vendor/lib64" :
-                    "/system/lib:/vendor/lib";
-            String socketName = ShellUtils.genRandomAlphaNumString(16).toString();
-            String cmd = String.format(Locale.US,
-                    "(LD_LIBRARY_PATH=%s CLASSPATH=%s %s /system/bin " +
-                            "--nice-name=`cat /proc/%d/cmdline`-root %s %s)&",
-                    LD_LIBRARY_PATH, context.getPackageCodePath(), app_process,
-                    Process.myPid(), EntryPoint.class.getName(), socketName);
-            Shell.su(cmd).exec();
-
-            // Establish connection after server started
-            LocalSocket socket = Sockets.newMasterSocket(socketName);
-            socketOut = new OutputStreamWriter(socket.getOutputStream());
-        } catch (IOException e) {
-            InternalUtils.stackTrace(e);
+    static synchronized Void serverError() throws IOException {
+        Sockets.clearPool();
+        Context context = InternalUtils.getContext();
+        for (Map.Entry<ServiceConnection, RootClientBinder> e : connMap.entrySet()) {
+            ComponentName name = new ComponentName(context, e.getValue().getBoundService());
+            UiThreadHandler.run(() -> e.getKey().onServiceDisconnected(name));
         }
+
+        // Rebind services
+        socketOut = null;
+        for (Map.Entry<ServiceConnection, RootClientBinder> e : connMap.entrySet()) {
+            bindService(context, e.getValue().getBoundService(), e.getKey());
+        }
+        return null;
+    }
+
+    @WorkerThread
+    private static synchronized void bindService(
+            Context context, Class<? extends RootService> cls, ServiceConnection conn)
+            throws IOException {
+        if (socketOut == null)
+            startRootServer(context);
+        String msg = String.format("%s|%s\n", BIND, cls.getName());
+        socketOut.write(msg);
+        socketOut.flush();
+        RootClientBinder binder = new RootClientBinder(cls);
+        connMap.put(conn, binder);
+        ComponentName name = new ComponentName(context, cls);
+        UiThreadHandler.run(() -> conn.onServiceConnected(name, binder));
+    }
+
+    @WorkerThread
+    private static synchronized void startRootServer(Context context) throws IOException {
+        String app_process = new File("/proc/self/exe").getCanonicalPath();
+        String LD_LIBRARY_PATH = app_process.contains("64") ?
+                "/system/lib64:/vendor/lib64" :
+                "/system/lib:/vendor/lib";
+        String socketName = ShellUtils.genRandomAlphaNumString(16).toString();
+        String cmd = String.format(Locale.US,
+                "(LD_LIBRARY_PATH=%s CLASSPATH=%s %s /system/bin " +
+                        "--nice-name=`cat /proc/%d/cmdline`:root %s %s)&",
+                LD_LIBRARY_PATH, context.getPackageCodePath(), app_process,
+                Process.myPid(), EntryPoint.class.getName(), socketName);
+        Shell.su(cmd).exec();
+
+        // Establish connection after server started
+        LocalSocket socket = Sockets.newMasterSocket(socketName);
+        socketOut = new OutputStreamWriter(socket.getOutputStream());
     }
 }
