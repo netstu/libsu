@@ -20,12 +20,10 @@ import androidx.annotation.Nullable;
  */
 class RootClientBinder extends Binder {
 
-    private byte[] rawReply;
     private boolean unBound = false;
     private Intent intent;
 
     RootClientBinder(Intent i) {
-        rawReply = new byte[4096];
         intent = i;
     }
 
@@ -52,14 +50,14 @@ class RootClientBinder extends Binder {
             handle.socketOut.flush();
 
             // Read reply
-            int replySz = handle.socketIn.readInt();
-            if (replySz < 0)
-                return false;  /* Unknown code */
-            if (rawReply.length < replySz)
-                rawReply = new byte[(replySz / 4096 + 1) * 4096];
-            handle.socketIn.readFully(rawReply, 0, replySz);
-            if (reply != null)
+            if (reply != null) {
+                int replySz = handle.socketIn.readInt();
+                byte[] rawReply = new byte[replySz];
+                handle.socketIn.readFully(rawReply);
                 reply.unmarshall(rawReply, 0, replySz);
+            } else {
+                ShellUtils.cleanInputStream(handle.socketIn);
+            }
         } catch (IOException e) {
             Shell.EXECUTOR.submit(RootIPC::serverError);
             throw new DeadObjectException();

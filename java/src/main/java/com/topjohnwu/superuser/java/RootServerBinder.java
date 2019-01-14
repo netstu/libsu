@@ -8,11 +8,9 @@ import com.topjohnwu.superuser.Shell;
 class RootServerBinder {
 
     private IBinder binder;
-    private byte[] rawData;
 
     RootServerBinder(IBinder b) {
         binder = b;
-        rawData = new byte[4096];
     }
 
     void transact(int sockHash) {
@@ -28,10 +26,10 @@ class RootServerBinder {
             try {
                 // Read data
                 int dataSz = handle.socketIn.readInt();
-                if (dataSz > rawData.length)
-                    rawData = new byte[(dataSz / 4096 + 1) * 4096];
-                handle.socketIn.readFully(rawData, 0, dataSz);
+                byte[] rawData = new byte[dataSz];
+                handle.socketIn.readFully(rawData);
                 data.unmarshall(rawData, 0, dataSz);
+                data.setDataPosition(0);
 
                 // Actual invocation
                 if (!binder.transact(code, data, reply, 0)) {

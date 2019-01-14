@@ -92,16 +92,13 @@ public class EntryPoint {
         System.exit(0);
     }
 
-    private byte[] rawIntent = new byte[4096];
-
     private Intent readIntent(Sockets.Handle handle) throws IOException {
         Parcel parcel = Parcel.obtain();
         Intent intent;
         try {
             int intentSz = handle.socketIn.readInt();
-            if (rawIntent.length < intentSz)
-                rawIntent = new byte[(intentSz / 4096 + 1) * 4096];
-            handle.socketIn.readFully(rawIntent, 0, intentSz);
+            byte[] rawIntent = new byte[intentSz];
+            handle.socketIn.readFully(rawIntent);
             parcel.unmarshall(rawIntent, 0, intentSz);
             parcel.setDataPosition(0);
             intent = new Intent();
