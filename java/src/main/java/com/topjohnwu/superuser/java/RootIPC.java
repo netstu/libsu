@@ -109,26 +109,34 @@ public class RootIPC {
     }
 
     @WorkerThread
-    private static synchronized Void bindService0(Intent intent, ServiceConnection conn)
-            throws IOException {
+    private static void writeIntent(Intent intent, Sockets.Handle handle) throws IOException {
         Parcel parcel = Parcel.obtain();
-        try (Sockets.Handle handle = Sockets.clientGetSocket()) {
-            String msg = String.format(Locale.US, "%s|%d\n", BIND, handle.hashCode());
-            socketOut.write(msg);
-            socketOut.flush();
-
+        try {
             // Pass intent to server
             intent.writeToParcel(parcel, 0);
             byte[] rawIntent = parcel.marshall();
             handle.socketOut.writeInt(rawIntent.length);
             handle.socketOut.write(rawIntent);
             handle.socketOut.flush();
+        } finally {
+            parcel.recycle();
+        }
+    }
+
+    @WorkerThread
+    private static synchronized Void bindService0(Intent intent, ServiceConnection conn)
+            throws IOException {
+        try (Sockets.Handle handle = Sockets.clientGetSocket()) {
+            String msg = String.format(Locale.US, "%s|%d\n", BIND, handle.hashCode());
+            socketOut.write(msg);
+            socketOut.flush();
+
+            // Pass intent to server
+            writeIntent(intent, handle);
 
             // Wait for ack
             if (!handle.socketIn.readBoolean())
                 return null;
-        } finally {
-            parcel.recycle();
         }
         RootClientBinder binder = new RootClientBinder(intent);
         connMap.put(conn, binder);
